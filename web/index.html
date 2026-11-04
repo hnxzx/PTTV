@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>PTTV · 直播 / 点播</title>
+<script src="./hls.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body,html{width:100%;height:100%;overflow:hidden;background:#000;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;color:#fff}
+#stage{position:fixed;inset:0;z-index:1;display:flex;align-items:center;justify-content:center;background:#000}
+#video{width:100%;height:100%;object-fit:contain;background:#000}
+
+/* 顶栏 */
+#topbar{position:fixed;top:0;left:0;right:0;min-height:52px;z-index:10;display:flex;align-items:center;justify-content:space-between;padding:8px 16px;
+background:linear-gradient(180deg,rgba(0,0,0,.85) 0%,rgba(0,0,0,0) 100%);transition:opacity .4s}
+#topbar.hide{opacity:0;pointer-events:none}
+#topbar .ttl{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:700;letter-spacing:.5px}
+#topbar .ttl b{color:#3ecf8e}
+#topbar .now{font-size:12px;color:#9fd8bd;background:rgba(62,207,142,.14);border:1px solid rgba(62,207,142,.35);border-radius:4px;padding:1px 8px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#topbar .badge{font-size:11px;color:#3ecf8e;background:rgba(62,207,142,.14);border:1px solid rgba(62,207,142,.35);border-radius:4px;padding:1px 8px}
+#topbar .clock{font-size:14px;color:#cdd8d2;font-variant-numeric:tabular-nums}
+#topbar .btns{display:flex;gap:4px}
+#topbar .btns button{width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:6px;background:transparent;border:0;color:#c9d6cf;cursor:pointer;font-size:13px}
+#topbar .btns button:hover{background:rgba(255,255,255,.14);color:#fff}
+#topbar .btns button.on{color:#3ecf8e}
+
+/* 换台遮罩 */
+#veil{position:fixed;inset:0;z-index:50;background:#000;display:none;flex-direction:column;align-items:center;justify-content:center;gap:12px;pointer-events:none}
+#veil.show{display:flex}
+#veil .sp{width:42px;height:42px;border:3px solid rgba(62,207,142,.18);border-top-color:#3ecf8e;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#veil .vn{font-size:40px;font-weight:800;color:#3ecf8e;letter-spacing:2px;line-height:1}
+#veil .vt{font-size:14px;color:#3ecf8e;letter-spacing:3px}
+#veil .sub{font-size:12px;color:#7fb89a;margin-top:4px;letter-spacing:1px}
+
+/* OSD 横幅 */
+#osd{position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:20;background:rgba(12,18,24,.9);border:1.5px solid rgba(62,207,142,.55);border-radius:12px;padding:10px 26px;text-align:center;opacity:0;transition:opacity .25s;pointer-events:none}
+#osd.show{opacity:1}
+#osd .on{font-size:22px;font-weight:700}
+#osd .os{font-size:11px;color:#8fb8a3;margin-top:2px}
+
+/* 频道抽屉 */
+#drawer{position:fixed;top:0;right:0;bottom:0;width:340px;max-width:82vw;z-index:30;background:rgba(12,18,24,.9);backdrop-filter:blur(20px);border-left:1px solid rgba(255,255,255,.09);transform:translateX(102%);transition:transform .32s cubic-bezier(.16,1,.3,1);display:flex;flex-direction:column}
+#drawer.open{transform:translateX(0)}
+#drawer .hd{padding:14px 16px 8px;font-size:15px;font-weight:600;border-bottom:1px solid rgba(255,255,255,.07);display:flex;justify-content:space-between;align-items:center}
+#drawer .hd .hint{font-size:11px;color:#7f9a8c;font-weight:400}
+#tabs{display:flex;gap:4px;padding:10px 12px 6px;flex-wrap:wrap}
+#tabs button{font-size:12px;color:#a8bfb3;padding:4px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.1);background:transparent;cursor:pointer}
+#tabs button.on{color:#0b1f16;background:#3ecf8e;border-color:#3ecf8e;font-weight:600}
+#chlist{flex:1;overflow-y:auto;padding:8px 10px 14px}
+.ci{display:flex;align-items:center;gap:8px;padding:9px 10px;margin-bottom:4px;border-radius:8px;font-size:14px;cursor:pointer;border:1px solid transparent}
+.ci:hover{background:rgba(62,207,142,.12)}
+.ci.cur{background:rgba(62,207,142,.2);border-color:rgba(62,207,142,.5);color:#fff;font-weight:600}
+.ci .nm{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ci .star{width:24px;height:24px;display:flex;align-items:center;justify-content:center;color:#5d7a6c;cursor:pointer}
+.ci .star.on{color:#ffd166}
+.ci .src{font-size:10px;color:#3ecf8e;border:1px solid rgba(62,207,142,.4);border-radius:6px;padding:1px 8px;margin-left:6px}
+.ci .chancnt{font-size:10px;color:#ffb36b;border:1px solid rgba(255,170,80,.4);border-radius:6px;padding:1px 6px;margin-left:4px}
+.empty{padding:26px 16px;text-align:center;color:#5d7a6c;font-size:13px}
+
+/* 提示条 */
+#tips{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);z-index:9;font-size:12px;color:rgba(255,255,255,.55);background:rgba(0,0,0,.55);padding:5px 16px;border-radius:999px;pointer-events:none;transition:opacity .4s}
+#tips.hide{opacity:0}
+</style>
+</head>
+<body>
+<div id="stage"><video id="video" playsinline autoplay></video></div>
+
+<div id="topbar">
+  <div class="ttl">PT<b>TV</b>
+    <span class="badge" id="type-badge">直播</span>
+    <span class="now" id="now">…</span>
+  </div>
+  <div class="clock" id="clock">00:00:00</div>
+  <div class="btns">
+    <button id="b-live" title="直播 (L)">直</button>
+    <button id="b-vod"  title="点播 (V)">点</button>
+    <button id="b-full" title="全屏 (F)">⛶</button>
+    <button id="b-list" title="列表 (O)">☰</button>
+  </div>
+</div>
+
+<div id="veil">
+  <div class="vn" id="veil-num"></div>
+  <div class="sp"></div>
+  <div class="vt" id="veil-txt">加载中</div>
+  <div class="sub" id="veil-sub"></div>
+</div>
+
+<div id="osd"><div class="on" id="osd-name"></div><div class="os">PTTV</div></div>
+
+<div id="drawer">
+  <div class="hd"><span id="drawer-title">频道列表</span><span class="hint">↑↓切台 · OK切换</span></div>
+  <div id="tabs"></div>
+  <div id="chlist"></div>
+</div>
+
+<div id="tips">↑↓切台 · O列表 · F全屏 · L直播 · V点播 · M静音</div>
+
+<script>
+/* ============================================================
+ * PTTV 播放器：直播 + 点播 双类型，多通道 5 秒自动切换
+ * - 数据源：采集器生成的 live.json / cang.json（仓库根目录）
+ * - 直播：每频道多通道 channels[]，按测速 ms 升序，最优在前
+ *   通道1失败 5 秒内未出画面 → 自动切通道2 → 通道3...
+ * - 点播：多仓 JSON（urls[]），切换多仓线路
+ * ============================================================ */
+
+const DATA = {
+  live: "live.json",
+  cang: "cang.json",
+};
+
+/* 内置兜底（live.json 加载失败时启用） */
+const FALLBACK_LIVE = [
+  {num:1, name:"浙江卫视", group:"卫视频道", channels:[
+    {url:"http://ali-m-l.cztv.com/channels/lantian/channel01/1080p.m3u8", ms:0},
+  ]},
+];
+
+let TYPE = "live";            // "live" | "vod"
+let CHANNELS = [];           // 直播频道
+let CANG = [];              // 点播多仓 [{name,url}]
+let curIdx = 0, srcIdx = 0, switchTimer = null, failCount = 0;
+let activeTab = "全部";
+
+const $ = id => document.getElementById(id);
+const video = $("video");
+let hls = null;
+
+/* ---------------- 数据加载 ---------------- */
+function loadAll(){
+  fetch(DATA.live,{cache:"no-store"})
+    .then(r=>{ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
+    .then(d=>{ CHANNELS = (Array.isArray(d)&&d.length) ? d : FALLBACK_LIVE; onReady(); })
+    .catch(e=>{ CHANNELS = FALLBACK_LIVE; showOSD("live.json 加载失败，用内置兜底", e.message); onReady(); });
+  fetch(DATA.cang,{cache:"no-store"})
+    .then(r=>{ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
+    .then(d=>{ CANG = (d.urls||[]).slice(); }).catch(()=>{});
+}
+function onReady(){
+  renderTabs(); renderList();
+  const last = parseInt(localStorage.getItem("pttv.last")||"0",10);
+  playChannel((last>=0 && last<CHANNELS.length) ? last : 0);
+}
+
+/* ---------------- 播放核心：多通道 5 秒自动切换 ---------------- */
+function buildSrcs(ch){
+  // 直播：ch.channels 已是按 ms 升序的最优在前
+  if(ch.channels && ch.channels.length) return ch.channels.map(c=>c.url);
+  return ch.url ? [ch.url] : [];
+}
+
+function playSrc(url, onReady, onFail){
+  if(Hls.isSupported()){
+    if(hls){ hls.destroy(); hls=null; }
+    hls = new Hls({maxBufferLength:30, liveDurationInfinity:true});
+    hls.loadSource(url); hls.attachMedia(video);
+    hls.on(Hls.Events.MANIFEST_PARSED, ()=>{
+      video.play().catch(()=>{ video.muted=true; video.play(); });
+      onReady && onReady();
+    });
+    hls.on(Hls.Events.ERROR,(d,e)=>{
+      if(e.fatal){
+        if(e.type===Hls.ErrorTypes.NETWORK_ERROR){ onFail && onFail(); }
+        else hls.startLoad();
+      }
+    });
+  } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+    video.src = url;
+    video.play().catch(()=>{ video.muted=true; video.play(); });
+    onReady && onReady();
+  } else { onFail && onFail(); }
+}
+
+function playChannel(idx){
+  if(idx<0) idx=CHANNELS.length-1; if(idx>=CHANNELS.length) idx=0;
+  curIdx=idx; srcIdx=0; failCount=0;
+  const ch = CHANNELS[idx];
+  try{ localStorage.setItem("pttv.last", String(idx)); }catch(e){}
+  showVeil(ch.name, ch.num);
+  renderList(); updateNow();
+  trySrc(ch, 0);
+}
+
+function trySrc(ch, s){
+  const srcs = buildSrcs(ch);
+  if(s>=srcs.length){
+    hideVeil(); showOSD(ch.name+" · 无可用通道", "请点 ☰ 换台");
+    return;
+  }
+  srcIdx = s;
+  updateVeilSub("通道 "+(s+1)+" / "+srcs.length);
+  const startAt = Date.now();
+  playSrc(srcs[s],
+    ()=>{ clearTimeout(switchTimer); setTimeout(hideVeil, 1200); },
+    ()=>{
+      // 通道失败：若 5 秒内未出画面，自动切下一通道
+      if(curIdx !== CHANNELS.indexOf(ch)) return;
+      if(s+1 < srcs.length){
+        const wait = Math.max(0, 5000 - (Date.now()-startAt));
+        switchTimer = setTimeout(()=>trySrc(ch, s+1), wait);
+      } else {
+        hideVeil(); showOSD(ch.name+" · 全部通道失效","请点 ☰ 换台或稍后再试");
+      }
+    }
+  );
+}
+
+function switchByName(name){
+  let idx = CHANNELS.findIndex(c=>c.name===name);
+  if(idx<0) return;
+  playChannel(idx);
+}
+
+/* ---------------- 点播多仓切换 ---------------- */
+function switchCang(i){
+  if(!CANG[i]) return;
+  showVeil("点播 · "+CANG[i].name, i+1);
+  updateNow();
+  // 点播：拉多仓 JSON → 解析出可播 URL → 播放
+  fetchCangAndPlay(CANG[i].url, i);
+}
+function fetchCangAndPlay(url, cangIdx){
+  fetch(url,{cache:"no-store"})
+    .then(r=>r.json())
+    .then(d=>{
+      const arr = d.urls || d.videos || [];
+      if(Array.isArray(arr) && arr.length){
+        const u = arr[0];
+        const target = (typeof u==="object") ? (u.url||u.src||"") : u;
+        if(target){ playSrc(target, ()=>{ setTimeout(hideVeil,1500); },
+          ()=>{ hideVeil(); showOSD("点播源不可达","请换多仓"); }); }
+      } else { hideVeil(); showOSD("点播仓为空","请换多仓"); }
+    })
+    .catch(()=>{ hideVeil(); showOSD("点播仓加载失败","请换多仓"); });
+}
+
+/* ---------------- 列表渲染 ---------------- */
+function renderTabs(){
+  const cats=[];
+  if(TYPE==="live"){
+    CHANNELS.forEach(c=>{ if(cats.indexOf(c.group)<0) cats.push(c.group); });
+    const tabs = ["全部"].concat(cats.filter(c=>c!=="全部"), ["收藏"]);
+    $("drawer-title").textContent="频道列表";
+    setTabs(tabs);
+  } else {
+    const tabs=["多仓线路"];
+    $("drawer-title").textContent="点播多仓";
+    setTabs(tabs);
+  }
+}
+function setTabs(tabs){
+  activeTab = tabs[0];
+  let html="";
+  tabs.forEach(t=>{ html+=`<button data-t="${t}" class="${t===activeTab?"on":""}">${t}</button>`; });
+  $("tabs").innerHTML = html;
+  Array.from($("tabs").querySelectorAll("button")).forEach(b=>{
+    b.onclick=()=>{ activeTab=b.dataset.t; renderTabs(); renderList(); };
+  });
+}
+function panelChannels(){
+  if(TYPE!=="live") return CANG.map((c,i)=>({num:i+1,name:c.name,cat:"多仓",_cangIdx:i}));
+  if(activeTab==="全部") return CHANNELS;
+  if(activeTab==="收藏") return CHANNELS.filter(c=>isFav(c.name));
+  return CHANNELS.filter(c=>c.group===activeTab);
+}
+function renderList(){
+  const cur = TYPE==="live" ? CHANNELS[curIdx].name : "点播";
+  let html="";
+  panelChannels().forEach(c=>{
+    if(c._cangIdx!==undefined){
+      html+=`<div class="ci ${c.name==="点播"?"cur":""}" data-cang="${c._cangIdx}">
+        <span class="nm">${c.num}. ${c.name}</span><span class="src">多仓</span></div>`;
+    } else {
+      const f=isFav(c.name);
+      const chancnt = c.channels ? c.channels.length : 0;
+      html+=`<div class="ci ${c.name===cur?"cur":""}" data-name="${c.name}">
+        <span class="nm">${c.num}. ${c.name}</span>
+        ${chancnt>1?`<span class="chancnt">${chancnt}通道</span>`:""}
+        <span class="star ${f?"on":""}" data-fav="${c.name}">★</span>
+      </div>`;
+    }
+  });
+  $("chlist").innerHTML = html || '<div class="empty">暂无</div>';
+  Array.from($("chlist").querySelectorAll(".ci")).forEach(row=>{
+    row.onclick=e=>{
+      if(e.target.dataset.fav){ toggleFav(e.target.dataset.fav); return; }
+      if(row.dataset.cang!==undefined){ switchCang(parseInt(row.dataset.cang,10)); }
+      else switchByName(row.dataset.name);
+      $("drawer").classList.remove("open");
+    };
+  });
+}
+
+/* ---------------- 直播/点播切换 ---------------- */
+function setType(t){
+  TYPE=t;
+  $("type-badge").textContent = (t==="live")?"直播":"点播";
+  $("b-live").classList.toggle("on", t==="live");
+  $("b-vod").classList.toggle("on", t==="vod");
+  $("drawer-title").textContent = (t==="live")?"频道列表":"点播多仓";
+  curIdx=0; srcIdx=0;
+  renderTabs(); renderList();
+  if(t==="live") playChannel(0);
+  else if(CANG.length) switchCang(0);
+  else { hideVeil(); showOSD("点播多仓加载中","采集器稍后生成"); }
+}
+
+/* ---------------- 收藏 ---------------- */
+function favs(){ try{return JSON.parse(localStorage.getItem("pttv.favs")||"[]");}catch(e){return[];} }
+function saveFavs(a){ try{localStorage.setItem("pttv.favs",JSON.stringify(a));}catch(e){} }
+function isFav(name){ return favs().indexOf(name)>=0; }
+function toggleFav(name){
+  let a=favs(), i=a.indexOf(name);
+  if(i>=0){ a.splice(i,1); showOSD("已取消收藏 "+name,""); }
+  else{ a.push(name); showOSD("已收藏 "+name,""); }
+  saveFavs(a); renderList();
+}
+
+/* ---------------- OSD / 顶栏 ---------------- */
+let osdT=null;
+function showOSD(name, sub){
+  $("osd-name").textContent = name||"";
+  const os=$("osd").querySelector(".os"); if(os) os.textContent = sub||"PTTV";
+  $("osd").classList.add("show");
+  clearTimeout(osdT); osdT=setTimeout(()=>$("osd").classList.remove("show"),2600);
+}
+function updateNow(){
+  if(TYPE==="live"){
+    $("now").textContent = CHANNELS[curIdx].name;
+    $("now").title = CHANNELS[curIdx].name;
+  } else {
+    $("now").textContent = "点播";
+  }
+}
+
+/* ---------------- 遮罩 ---------------- */
+function showVeil(name, num){
+  $("veil").classList.add("show");
+  $("veil-num").textContent = num!=null?String(num):"";
+  $("veil-num").style.visibility = num!=null?"visible":"hidden";
+  $("veil-txt").textContent = name||"加载中";
+}
+function updateVeilSub(txt){ $("veil-sub").textContent = txt||""; }
+function hideVeil(){ $("veil").classList.remove("show"); }
+
+/* ---------------- 键控 ---------------- */
+window.addEventListener("keydown",e=>{
+  wakeUI();
+  const open=$("drawer").classList.contains("open");
+  switch(e.key){
+    case"ArrowUp": e.preventDefault(); playChannel(curIdx-1); break;
+    case"ArrowDown": e.preventDefault(); playChannel(curIdx+1); break;
+    case"f":case"F": toggleFull(); break;
+    case"m":case"M": video.muted=!video.muted; showOSD(video.muted?"已静音":"已出声",""); break;
+    case"o":case"O": openDrawer(); break;
+    case"l":case"L": setType("live"); break;
+    case"v":case"V": setType("vod"); break;
+    default:
+      if(/^[0-9]$/.test(e.key)){
+        const d=e.key==="0"?9:parseInt(e.key)-1;
+        if(d>=0 && d<CHANNELS.length) playChannel(d);
+      }
+  }
+});
+function openDrawer(){ $("drawer").classList.add("open"); }
+function closeDrawer(){ $("drawer").classList.remove("open"); }
+function toggleFull(){
+  if(!document.fullscreenElement) document.documentElement.requestFullscreen().catch(()=>{});
+  else document.exitFullscreen().catch(()=>{});
+}
+$("b-live").onclick=()=>setType("live");
+$("b-vod").onclick=()=>setType("vod");
+$("b-full").onclick=toggleFull;
+$("b-list").onclick=()=>{ if($("drawer").classList.contains("open")) closeDrawer(); else openDrawer(); };
+
+/* ---------------- UI 显隐 ---------------- */
+let hideT=null;
+function wakeUI(){
+  $("topbar").classList.remove("hide"); $("tips").classList.remove("hide");
+  clearTimeout(hideT);
+  hideT=setTimeout(()=>{ if(!$("drawer").classList.contains("open")){ $("topbar").classList.add("hide"); $("tips").classList.add("hide"); } },4000);
+}
+window.addEventListener("mousemove",wakeUI);
+window.addEventListener("touchstart",wakeUI);
+
+/* ---------------- 时钟 ---------------- */
+setInterval(()=>{ $("clock").textContent = new Date().toTimeString().split(" ")[0]; },1000);
+
+/* ---------------- 初始化 ---------------- */
+loadAll();
+</script>
+</body>
+</html>
