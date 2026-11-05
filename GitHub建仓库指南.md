@@ -79,7 +79,7 @@ https://hnxzx.github.io/PTTV/
 
 1. 访问 **`https://github.com/settings/tokens`**
 2. 点 **Generate new token (classic)**
-3. Note 填 `pttv`，勾 **repo** 整组，Expiration 选 7 天
-4. 点 **Generate token**，复制 `ghp_` 开头那串发我
+3. Note 填 `pttv`，勾 **repo** 整组和 **workflow**，Expiration 选 7 天
+4. 点 **Generate token**，复制生成的令牌（仅用于推送，用完即吊销）
 
 > token=密码，用完建议到 `settings/tokens` 里 Revoke（吊销）。
