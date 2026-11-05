@@ -43,6 +43,21 @@ jobs:
       - name: Copy outputs to web/
         run: |
           mkdir -p web
+          # 保底：Actions 每轮是全新环境，采集器读不到旧缓存，
+          # 因此在这里再做一道规模校验，避免上游全挂时把公网订阅覆盖成空数据。
+          new_lines=$(grep -c ',http' out/live.txt 2>/dev/null || true)
+          old_lines=$(grep -c ',http' web/live.txt 2>/dev/null || true)
+          new_lines=${new_lines:-0}
+          old_lines=${old_lines:-0}
+          echo "本轮通道数 ${new_lines} / 线上 ${old_lines}"
+          if [ "$new_lines" -lt 100 ]; then
+            echo "本轮结果过少，保留线上数据，跳过覆盖"
+            exit 0
+          fi
+          if [ "$old_lines" -gt 0 ] && [ "$new_lines" -lt $((old_lines * 4 / 10)) ]; then
+            echo "本轮结果较线上骤降，保留线上数据，跳过覆盖"
+            exit 0
+          fi
           cp out/live.json web/live.json
           cp out/live.txt  web/live.txt
           cp out/cang.json web/cang.json
