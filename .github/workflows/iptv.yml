@@ -11,6 +11,11 @@ on:
       - 'collector/**'
       - 'seed/**'
 
+# 关键：允许 GITHUB_TOKEN 把采集结果推回 main
+# 缺少此项时 "Commit changes" 步骤会因权限不足失败
+permissions:
+  contents: write
+
 env:
   TZ: Asia/Shanghai
 
@@ -37,21 +42,25 @@ jobs:
 
       - name: Copy outputs to web/
         run: |
+          mkdir -p web
           cp out/live.json web/live.json
-          cp out/live.txt web/live.txt
+          cp out/live.txt  web/live.txt
           cp out/cang.json web/cang.json
 
       - name: GetTime
         run: echo "GET_TIME=$(date +'%Y-%m-%d %H:%M:%S CST')" >> "$GITHUB_ENV"
 
+      # Pages 部署源为 main 分支根目录，提交回 main 后公网链接自动更新
       - name: Commit changes
         run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          git add web/live.json web/live.txt web/cang.json out/state.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add web/live.json web/live.txt web/cang.json
+          if [ -f out/state.json ]; then git add -f out/state.json; fi
           if git diff --cached --quiet; then
             echo "无变更，跳过提交"
-          else
-            git commit -m "自动更新：${GET_TIME}"
-            git push origin main
+            exit 0
           fi
+          git commit -m "自动更新：${GET_TIME}"
+          git pull --rebase origin main
+          git push origin HEAD:main
