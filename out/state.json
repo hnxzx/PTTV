@@ -1,8 +1,8 @@
 {
-  "last_update": 1794062226,
+  "last_update": 1794080896,
   "live_channels_total": 1380,
   "live_channels_ok": 0,
-  "live_nodes_total": 2458,
+  "live_nodes_total": 2454,
   "live_lines_out": 0,
   "cctv_lines": 0,
   "sat_lines": 0,
@@ -12,6 +12,6 @@
   "cang_out": 18,
   "sources_ok": 5,
   "sources_total": 6,
-  "checked_this_round": 52,
+  "checked_this_round": 143,
   "deep_checked": 0
 }
