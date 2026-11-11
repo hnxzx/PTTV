@@ -1,17 +1,17 @@
 {
-  "last_update": 1794370584,
-  "live_channels_total": 1380,
-  "live_channels_ok": 0,
-  "live_nodes_total": 2225,
-  "live_lines_out": 0,
+  "last_update": 1794412013,
+  "live_channels_total": 1379,
+  "live_channels_ok": 3,
+  "live_nodes_total": 2074,
+  "live_lines_out": 3,
   "cctv_lines": 0,
-  "sat_lines": 0,
+  "sat_lines": 3,
   "oth_lines": 0,
   "cang_total": 97,
   "cang_ok": 18,
   "cang_out": 18,
   "sources_ok": 5,
   "sources_total": 6,
-  "checked_this_round": 75,
-  "deep_checked": 0
+  "checked_this_round": 53,
+  "deep_checked": 1
 }
